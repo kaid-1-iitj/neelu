@@ -14,6 +14,7 @@ import Reports from "./pages/Reports";
 import SiteLayout from "./layout/SiteLayout";
 import { AuthProvider } from "@/context/AuthContext";
 import AuthPage from "./pages/Auth";
+import AgentsPage from "./pages/Agents";
 
 const queryClient = new QueryClient();
 
