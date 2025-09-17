@@ -31,6 +31,11 @@ router.post("/signup", async (req, res) => {
   }) satisfies z.ZodType<SignUpRequest>;
   const body = Schema.parse(req.body);
 
+  // Agents cannot sign up directly; must be created by Admin from Agents tab
+  if (body.role === "Agent") {
+    return res.status(403).json({ error: "Agents must be created by an Admin" });
+  }
+
   const col = await usersCol();
   const existingUser = await col.findOne({ email: body.email });
   if (existingUser) {
@@ -39,15 +44,16 @@ router.post("/signup", async (req, res) => {
 
   const hashedPassword = await hashPassword(body.password);
   const newUser = {
-    uid: new ObjectId().toHexString(), // Generate a unique ID for the user
+    uid: new ObjectId().toHexString(),
     email: body.email,
     name: body.name,
     role: body.role,
     password: hashedPassword,
+    isActive: true,
     createdAt: Date.now(),
   };
 
-  await col.insertOne(newUser);
+  await col.insertOne(newUser as any);
   const user: AuthUser = { uid: newUser.uid, email: newUser.email, name: newUser.name, role: newUser.role };
   const token = generateToken(user);
   return res.status(201).json({ user, token });
@@ -73,7 +79,11 @@ router.post("/signin", async (req, res) => {
     return res.status(401).json({ error: "Invalid credentials" });
   }
 
-  const authUser: AuthUser = { uid: user.uid, email: user.email, name: user.name, role: user.role };
+    if (user.role === "Agent" && (user as any).isActive === false) {
+    return res.status(403).json({ error: "Agent account is terminated" });
+  }
+
+  const authUser: AuthUser = { uid: user.uid, email: user.email, name: (user as any).name, role: user.role };
   const token = generateToken(authUser);
   return res.status(200).json({ user: authUser, token });
 });
@@ -107,6 +117,14 @@ router.put("/societies/:id/assign-agent", requireAuth(["Admin"]), async (req, re
   const { agentUid } = Body.parse(req.body);
   const col = await societiesCol();
   await col.updateOne({ _id: id }, { $set: { assignedAgentId: agentUid } });
+  return res.json({ ok: true });
+});
+
+router.put("/societies/:id/unassign-agent", requireAuth(["Admin"]), async (req, res) => {
+  const id = toId(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  const col = await societiesCol();
+  await col.updateOne({ _id: id }, { $unset: { assignedAgentId: "" } });
   return res.json({ ok: true });
 });
 
@@ -221,6 +239,43 @@ router.post("/bills/:billId/remarks", requireAuth(["Agent", "Manager", "Treasure
     previousStatus,
   };
   await col.updateOne({ _id: id }, { $push: { remarks: remark as any } });
+  return res.json({ ok: true });
+});
+
+// Agents
+router.get("/agents", requireAuth(["Admin"]), async (_req, res) => {
+  const col = await usersCol();
+  const agents = await col.find({ role: "Agent" }).project({ password: 0, _id: 0 }).toArray();
+  return res.json(agents);
+});
+
+router.post("/agents", requireAuth(["Admin"]), async (req, res) => {
+  const Body = z.object({ email: z.string().email(), password: z.string().min(6), name: z.string().optional() });
+  const body = Body.parse(req.body);
+  const col = await usersCol();
+  const existingUser = await col.findOne({ email: body.email });
+  if (existingUser) return res.status(409).json({ error: "Email already registered" });
+  const hashedPassword = await hashPassword(body.password);
+  const doc = {
+    uid: new ObjectId().toHexString(),
+    email: body.email,
+    name: body.name,
+    role: "Agent" as const,
+    password: hashedPassword,
+    isActive: true,
+    createdAt: Date.now(),
+  };
+  await col.insertOne(doc as any);
+  return res.status(201).json({ uid: doc.uid, email: doc.email, name: doc.name, role: doc.role, isActive: doc.isActive });
+});
+
+router.put("/agents/:uid/terminate", requireAuth(["Admin"]), async (req, res) => {
+  const { uid } = req.params;
+  const users = await usersCol();
+  const result = await users.updateOne({ uid }, { $set: { isActive: false } });
+  if (!result.matchedCount) return res.status(404).json({ error: "Agent not found" });
+  const societies = await societiesCol();
+  await societies.updateMany({ assignedAgentId: uid }, { $unset: { assignedAgentId: "" } });
   return res.json({ ok: true });
 });
 
