@@ -43,15 +43,12 @@ export interface SocietyDoc {
 }
 
 export interface UserDoc {
-  uid: string; // from auth
+  uid: string; // from Firebase Auth
   email: string;
-  name?: string;
   role: UserRole;
-  assignedSocieties?: string[]; // optional, if agents can manage multiple societies
+  assignedSocieties?: string[]; // societyIds for Agents
   associatedSocietyId?: string; // for Members
-  isEmailVerified?: boolean;
-  isActive: boolean;
-  password?: string; // stored only on server; never sent to client
+  isEmailVerified: boolean;
   createdAt: number; // epoch ms
 }
 
@@ -110,25 +107,8 @@ export interface AssignAgentRequest {
   agentUid: string;
 }
 
-export interface CreateAgentRequest {
-  email: string;
-  password: string;
-  name?: string;
-}
-
-export interface AgentListItem {
-  uid: string;
-  email: string;
-  name?: string;
-  role: Extract<UserRole, "Agent">;
-  isActive: boolean;
-}
-
 export interface CreateBillRequest
-  extends Pick<
-    BillDoc,
-    "societyId" | "vendorName" | "transactionNature" | "amount" | "dueDate"
-  > {
+  extends Pick<BillDoc, "societyId" | "vendorName" | "transactionNature" | "amount" | "dueDate"> {
   attachments?: { fileName: string; fileURL: string }[];
 }
 
