@@ -20,21 +20,9 @@ export const createSociety = (payload: {
   name: string;
   address: { street: string; city: string; state: string; zip: string };
   contactInfo: { phone?: string; email?: string };
-  members: {
-    role: "Manager" | "Treasurer" | "Secretary" | "President";
-    email: string;
-  }[];
-}) =>
-  api<{ id: string }>("/api/societies", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-export const getBills = (params?: {
-  societyId?: string;
-  status?: string;
-  q?: string;
-}) => {
+  members: { role: "Manager" | "Treasurer" | "Secretary" | "President"; email: string }[];
+}) => api<{ id: string }>("/api/societies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+export const getBills = (params?: { societyId?: string; status?: string; q?: string }) => {
   const qs = new URLSearchParams();
   if (params?.societyId) qs.set("societyId", params.societyId);
   if (params?.status) qs.set("status", params.status);
@@ -49,49 +37,6 @@ export const createBill = (payload: {
   amount: number;
   dueDate: number;
   attachments?: { fileName: string; fileURL: string }[];
-}) =>
-  api<{ id: string }>("/api/bills", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-export const updateBillStatus = (
-  billId: string,
-  payload: { status: string; remark?: string },
-) =>
-  api<{ ok: true }>(`/api/bills/${billId}/status`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-// Agents
-export const getAgents = () => api<any[]>("/api/agents");
-export const createAgent = (payload: {
-  email: string;
-  password: string;
-  name?: string;
-}) =>
-  api<{
-    uid: string;
-    email: string;
-    name?: string;
-    role: string;
-    isActive: boolean;
-  }>("/api/agents", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-export const terminateAgent = (uid: string) =>
-  api<{ ok: true }>(`/api/agents/${uid}/terminate`, { method: "PUT" });
-export const assignAgentToSociety = (societyId: string, agentUid: string) =>
-  api<{ ok: true }>(`/api/societies/${societyId}/assign-agent`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ agentUid }),
-  });
-export const unassignAgentFromSociety = (societyId: string) =>
-  api<{ ok: true }>(`/api/societies/${societyId}/unassign-agent`, {
-    method: "PUT",
-  });
+}) => api<{ id: string }>("/api/bills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+export const updateBillStatus = (billId: string, payload: { status: string; remark?: string }) =>
+  api<{ ok: true }>(`/api/bills/${billId}/status`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });

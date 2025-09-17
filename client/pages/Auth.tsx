@@ -1,21 +1,9 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
@@ -27,15 +15,19 @@ export default function AuthPage() {
       <Card className="w-full max-w-md bg-card/80 backdrop-blur">
         <CardHeader className="text-center">
           <CardTitle>Welcome to Society Ledgers</CardTitle>
-          <CardDescription>Sign in to continue</CardDescription>
+          <CardDescription>Sign in or create an account to continue</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-1">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="login">Login</TabsTrigger>
+              <TabsTrigger value="signup">Sign Up</TabsTrigger>
             </TabsList>
             <TabsContent value="login">
               <LoginForm />
+            </TabsContent>
+            <TabsContent value="signup">
+              <SignupForm />
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -101,7 +93,7 @@ function LoginForm() {
   );
 }
 
-function SignupForm_DEPRECATED() {
+function SignupForm() {
   const { signUp } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState("");
@@ -111,14 +103,7 @@ function SignupForm_DEPRECATED() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const roles: UserRole[] = [
-    "Admin",
-    "Manager",
-    "Treasurer",
-    "Secretary",
-    "President",
-    "Agent",
-  ];
+  const roles: UserRole[] = ["Admin", "Manager", "Treasurer", "Secretary", "President", "Agent"];
 
   return (
     <form
