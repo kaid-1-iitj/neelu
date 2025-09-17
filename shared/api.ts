@@ -45,11 +45,16 @@ export interface SocietyDoc {
 export interface UserDoc {
   uid: string; // from Firebase Auth
   email: string;
+  name: string;
   role: UserRole;
+  password: string; // hashed password
   assignedSocieties?: string[]; // societyIds for Agents
   associatedSocietyId?: string; // for Members
   isEmailVerified: boolean;
+  isActive: boolean; // for agent termination
+  createdBy?: string; // uid of admin who created this user (for agents)
   createdAt: number; // epoch ms
+  terminatedAt?: number; // epoch ms when agent was terminated
 }
 
 export type BillStatus =
@@ -74,6 +79,7 @@ export interface BillDoc {
   status: BillStatus;
   attachments?: BillAttachment[];
   submittedBy: string; // user uid
+  remarks?: RemarkDoc[];
   createdAt: number; // epoch ms
 }
 
@@ -119,4 +125,144 @@ export interface UpdateBillStatusRequest {
 
 export interface CreateRemarkRequest {
   text: string;
+}
+
+// Authentication API types
+export interface SignUpRequest {
+  email: string;
+  password: string;
+  name: string;
+  role: UserRole;
+  otp?: string;
+}
+
+export interface SignInRequest {
+  email: string;
+  password: string;
+}
+
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+// Expense Report types
+export interface ExpenseReportSummary {
+  totalAmount: number;
+  totalBills: number;
+  averageAmount: number;
+}
+
+export interface ExpenseReport {
+  summary: ExpenseReportSummary;
+  bills: BillDoc[];
+  byStatus: Record<string, number>;
+  bySociety: Record<string, number>;
+  dateRange: {
+    startDate: string | null;
+    endDate: string | null;
+  };
+}
+
+export interface ExpenseReportFilters {
+  startDate?: string;
+  endDate?: string;
+  societyId?: string;
+  status?: BillStatus;
+}
+
+// Agent Management API types
+export interface CreateAgentRequest {
+  email: string;
+  name: string;
+  assignedSocieties?: string[];
+}
+
+export interface UpdateAgentSocietiesRequest {
+  assignedSocieties: string[];
+}
+
+export interface TerminateAgentRequest {
+  reason?: string;
+}
+
+// Member Invitation API types
+export interface InviteMemberRequest {
+  email: string;
+  role: Exclude<UserRole, "Admin" | "Agent">;
+  societyId: string;
+}
+
+export interface AcceptInvitationRequest {
+  token: string;
+  password: string;
+  name: string;
+}
+
+export interface MemberInvitationDoc {
+  email: string;
+  role: Exclude<UserRole, "Admin" | "Agent">;
+  societyId: string;
+  invitedBy: string; // uid of the member who sent the invitation
+  token: string; // unique token for invitation
+  isAccepted: boolean;
+  expiresAt: number; // epoch ms
+  createdAt: number; // epoch ms
+}
+
+// Society Management API interfaces
+export interface UpdateSocietyRequest {
+  name?: string;
+  address?: SocietyAddress;
+  contactInfo?: SocietyContactInfo;
+  isActive?: boolean;
+}
+
+export interface AddSocietyMemberRequest {
+  email: string;
+  role: UserRole;
+  name?: string;
+}
+
+export interface RemoveSocietyMemberRequest {
+  userId: string;
+}
+
+export interface SocietyMemberInfo {
+  userId: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  isActive: boolean;
+  joinedAt: number;
+}
+
+// Email and OTP related interfaces
+export interface EmailNotificationRequest {
+  to: string[];
+  subject: string;
+  body: string;
+  htmlBody?: string;
+}
+
+export interface SendOTPRequest {
+  email: string;
+  phone?: string;
+}
+
+export interface VerifyOTPRequest {
+  email: string;
+  otp: string;
+}
+
+export interface OTPVerificationDoc {
+  email: string;
+  phone?: string;
+  otp: string;
+  isVerified: boolean;
+  expiresAt: number; // epoch ms
+  createdAt: number; // epoch ms
+  attempts: number; // number of verification attempts
 }

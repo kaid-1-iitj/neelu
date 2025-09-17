@@ -29,6 +29,26 @@ export default function SiteHeader() {
           <NavLink to="/reports" className={navLinkClass}>
             Reports
           </NavLink>
+          {user && ["Admin", "Agent", "Manager", "Treasurer", "Secretary", "President"].includes(user.role) && (
+            <NavLink to="/expense-reports" className={navLinkClass}>
+              Expense Reports
+            </NavLink>
+          )}
+          {user?.role === "Admin" && (
+            <>
+              <NavLink to="/agents" className={navLinkClass}>
+                Agents
+              </NavLink>
+              <NavLink to="/societies" className={navLinkClass}>
+                Societies
+              </NavLink>
+            </>
+          )}
+          {user && ["Manager", "Treasurer", "Secretary", "President"].includes(user.role) && (
+            <NavLink to="/invitations" className={navLinkClass}>
+              Invitations
+            </NavLink>
+          )}
         </nav>
         <div className="flex items-center gap-3">
           {user ? (

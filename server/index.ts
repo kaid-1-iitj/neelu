@@ -1,6 +1,8 @@
 import "dotenv/config";
 import "dotenv/config";
 import express from "express";
+import path from "path";
+import fs from "fs";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
 import apiRouter from "./routes/api";
@@ -27,6 +29,13 @@ export function createServer() {
 
   // Society Ledgers API
   app.use("/api", apiRouter);
+
+  // Static file serving for uploads
+  const uploadsDir = path.resolve(process.cwd(), "uploads");
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  app.use("/uploads", express.static(uploadsDir));
 
   // Database Connection Check and Server Start Log
   connectToDatabase().then(() => {

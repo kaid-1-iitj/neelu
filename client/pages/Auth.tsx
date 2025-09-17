@@ -99,29 +99,49 @@ function SignupForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<UserRole>("Agent");
+  const [role, setRole] = useState<UserRole>("Manager");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const roles: UserRole[] = ["Admin", "Manager", "Treasurer", "Secretary", "President", "Agent"];
+  const roles: UserRole[] = ["Manager", "Treasurer", "Secretary", "President"];
+
+  const handleSendOTP = async () => {
+    if (!email) {
+      setError("Please enter your email first");
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+    try {
+      const { sendOTP } = await import("../lib/api");
+      await sendOTP({ email });
+      setOtpSent(true);
+    } catch (err: any) {
+      setError(err?.message || "Failed to send OTP");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      await signUp(email, password, name, role, otp);
+      navigate("/dashboard");
+    } catch (err: any) {
+      setError(err?.message || "Signup failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <form
-      className="grid gap-4"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setError(null);
-        setLoading(true);
-        try {
-          await signUp(email, password, name, role);
-          navigate("/dashboard");
-        } catch (err: any) {
-          setError(err?.message || "Signup failed");
-        } finally {
-          setLoading(false);
-        }
-      }}
-    >
+    <form className="grid gap-4" onSubmit={handleSignup}>
       <div className="grid gap-2">
         <Label htmlFor="name">Name</Label>
         <Input
@@ -171,8 +191,37 @@ function SignupForm() {
           </SelectContent>
         </Select>
       </div>
+      
+      {/* OTP Section */}
+      <div className="grid gap-2">
+        <Label htmlFor="otp">Verification Code</Label>
+        <div className="flex gap-2">
+          <Input
+            id="otp"
+            placeholder="Enter 6-digit code"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value)}
+            maxLength={6}
+            required
+            className="bg-background/60"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleSendOTP}
+            disabled={loading || otpSent}
+            className="whitespace-nowrap"
+          >
+            {otpSent ? "Sent" : "Send OTP"}
+          </Button>
+        </div>
+        {otpSent && (
+          <p className="text-sm text-green-600">OTP sent to your email. Check your inbox.</p>
+        )}
+      </div>
+
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
-      <Button type="submit" disabled={loading} className="bg-accent">
+      <Button type="submit" disabled={loading || !otpSent || !otp} className="bg-accent">
         {loading ? "Creating..." : "Create account"}
       </Button>
     </form>

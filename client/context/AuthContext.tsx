@@ -1,10 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import * as service from "../lib/auth";
+import type { UserRole } from "../../shared/api";
 
 export type AuthContextType = {
   user: service.AuthUser | null;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, name?: string, role?: service.UserRole) => Promise<void>;
+  signUp: (email: string, password: string, name?: string, role?: UserRole, otp?: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -25,8 +26,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const u = await service.signIn(email, password);
       setUser(u);
     },
-    async signUp(email, password, name, role) {
-      const u = await service.signUp(email, password, name, role);
+    async signUp(email, password, name, role, otp) {
+      const u = await service.signUp(email, password, name, role, otp);
       setUser(u);
     },
     async signOut() {

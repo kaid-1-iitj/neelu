@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
 import { useAuth } from "@/context/AuthContext";
-import { createBill, getBills, getSocieties, updateBillStatus, createSociety } from "@/lib/api";
+import { createBill, getBills, getSocieties, updateBillStatus, createSociety, uploadFiles } from "@/lib/api";
 
 const statuses = ["Pending", "Under Review", "Clarification Required", "Approved", "Rejected"] as const;
 type BillStatus = typeof statuses[number];
@@ -66,19 +66,6 @@ export default function Bills() {
                 </SelectContent>
               </Select>
             </div>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button className="bg-secondary/80 hover:bg-secondary">Add Society</Button>
-              </DialogTrigger>
-              <AddSocietyDialog
-                onSubmit={async (soc) => {
-                  await createSociety(soc);
-                  const list = await getSocieties();
-                  setSocieties(list);
-                  if (list[0]?.id) setSocietyId(list[0].id);
-                }}
-              />
-            </Dialog>
             <Dialog open={addBillOpen} onOpenChange={setAddBillOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-primary hover:bg-primary/90">Add New Bill</Button>
@@ -282,50 +269,42 @@ function AddBillDialog({ onSubmit, canSelectStatus, societies }: { onSubmit: (bi
           </div>
           <div className="grid gap-2 md:col-span-2">
             <Label>Attachments</Label>
-            {form.attachments.map((attachment, index) => (
-              <div key={index} className="flex gap-2 items-center">
-                <Input
-                  placeholder="File Name"
-                  value={attachment.fileName}
-                  onChange={(e) => {
-                    const newAttachments = [...form.attachments];
-                    newAttachments[index].fileName = e.target.value;
-                    setForm({ ...form, attachments: newAttachments });
-                  }}
-                  className="bg-background/60"
-                />
-                <Input
-                  placeholder="File URL"
-                  value={attachment.fileURL}
-                  onChange={(e) => {
-                    const newAttachments = [...form.attachments];
-                    newAttachments[index].fileURL = e.target.value;
-                    setForm({ ...form, attachments: newAttachments });
-                  }}
-                  className="bg-background/60"
-                />
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="icon"
-                  onClick={() => {
-                    const newAttachments = form.attachments.filter((_, i) => i !== index);
-                    setForm({ ...form, attachments: newAttachments });
-                  }}
-                >
-                  -
-                </Button>
+            <input
+              type="file"
+              multiple
+              accept="image/*,application/pdf"
+              onChange={async (e) => {
+                const files = Array.from(e.target.files || []);
+                if (files.length === 0) return;
+                try {
+                  const urls = await uploadFiles(files);
+                  const newAttachments = urls.map((u, i) => ({ fileName: files[i]?.name || `File ${i+1}`, fileURL: u }));
+                  setForm({ ...form, attachments: [...form.attachments, ...newAttachments] });
+                } catch (err) {
+                  console.error(err);
+                }
+              }}
+              className="block text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-secondary file:text-secondary-foreground hover:file:bg-secondary/90"
+            />
+            {form.attachments.length > 0 ? (
+              <div className="flex flex-col gap-2 mt-2">
+                {form.attachments.map((att, idx) => (
+                  <div key={idx} className="flex items-center justify-between gap-2 text-sm">
+                    <a href={att.fileURL} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">
+                      {att.fileName}
+                    </a>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setForm({ ...form, attachments: form.attachments.filter((_, i) => i !== idx) })}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
               </div>
-            ))}
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() =>
-                setForm({ ...form, attachments: [...form.attachments, { fileName: "", fileURL: "" }] })
-              }
-            >
-              Add Attachment
-            </Button>
+            ) : null }
           </div>
           {!canSelectStatus ? (
             <div className="md:col-span-2 text-xs text-muted-foreground">Status will start as Pending. Reviewers can update.</div>
@@ -379,68 +358,3 @@ function ReviewBillDialog({ bill, onSubmit, onClose }: { bill: any; onSubmit: (p
   );
 }
 
-function AddSocietyDialog({ onSubmit }: { onSubmit: (soc: { name: string; address: { street: string; city: string; state: string; zip: string }; contactInfo: { phone?: string; email?: string }; members: { role: "Manager" | "Treasurer" | "Secretary" | "President"; email: string }[] }) => void | Promise<void> }) {
-  const [name, setName] = useState("");
-  const [street, setStreet] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [zip, setZip] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-
-  return (
-    <DialogContent className="bg-background/95 border-border/60">
-      <DialogHeader>
-        <DialogTitle>Add Society</DialogTitle>
-      </DialogHeader>
-      <form
-        className="grid gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          onSubmit({
-            name,
-            address: { street, city, state, zip },
-            contactInfo: { email: email || undefined, phone: phone || undefined },
-            members: [],
-          });
-        }}
-      >
-        <div className="grid gap-2">
-          <Label>Name</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required className="bg-background/60" />
-        </div>
-        <div className="grid gap-2">
-          <Label>Street</Label>
-          <Input value={street} onChange={(e) => setStreet(e.target.value)} required className="bg-background/60" />
-        </div>
-        <div className="grid md:grid-cols-3 gap-2">
-          <div className="grid gap-2">
-            <Label>City</Label>
-            <Input value={city} onChange={(e) => setCity(e.target.value)} required className="bg-background/60" />
-          </div>
-          <div className="grid gap-2">
-            <Label>State</Label>
-            <Input value={state} onChange={(e) => setState(e.target.value)} required className="bg-background/60" />
-          </div>
-          <div className="grid gap-2">
-            <Label>ZIP</Label>
-            <Input value={zip} onChange={(e) => setZip(e.target.value)} required className="bg-background/60" />
-          </div>
-        </div>
-        <div className="grid md:grid-cols-2 gap-2">
-          <div className="grid gap-2">
-            <Label>Contact Email</Label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="bg-background/60" />
-          </div>
-          <div className="grid gap-2">
-            <Label>Contact Phone</Label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="bg-background/60" />
-          </div>
-        </div>
-        <div className="flex justify-end pt-2">
-          <Button type="submit" className="bg-accent">Create</Button>
-        </div>
-      </form>
-    </DialogContent>
-  );
-}

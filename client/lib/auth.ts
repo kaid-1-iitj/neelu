@@ -34,14 +34,15 @@ export async function signUp(
   email: string,
   password: string,
   name?: string,
-  role: UserRole = "Agent",
+  role: UserRole = "Manager",
+  otp?: string,
 ): Promise<AuthUser> {
   const response = await fetch("/api/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, name, role } as SignUpRequest),
+    body: JSON.stringify({ email, password, name, role, otp } as SignUpRequest),
   });
-  const data: ApiResponse<{ user: AuthUser; token: string }> = await response.json();
+  const data = await response.json();
 
   if (!response.ok) {
     throw new Error(data.error || "Signup failed");
@@ -56,7 +57,7 @@ export async function signIn(email: string, password: string): Promise<AuthUser>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password } as SignInRequest),
   });
-  const data: ApiResponse<{ user: AuthUser; token: string }> = await response.json();
+  const data = await response.json();
 
   if (!response.ok) {
     throw new Error(data.error || "Login failed");

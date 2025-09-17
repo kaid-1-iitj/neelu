@@ -2,7 +2,8 @@ import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
 import { UserRole } from "../../shared/api";
 import { Collection } from "mongodb";
-import { UserDoc, SocietyDoc, BillDoc, CreateSocietyRequest, CreateBillRequest } from "../../shared/api";
+import { UserDoc, SocietyDoc, BillDoc, CreateSocietyRequest, CreateBillRequest, MemberInvitationDoc } from "../../shared/api";
+import { hashPassword } from "../middleware/auth"; // Import hashPassword
 
 dotenv.config();
 
@@ -30,27 +31,33 @@ async function seed() {
   const usersCol = await getCollection<UserDoc>("users");
   const societiesCol = await getCollection<SocietyDoc>("societies");
   const billsCol = await getCollection<BillDoc>("bills");
+  const invitationsCol = await getCollection<MemberInvitationDoc>("memberInvitations");
 
   // Clear existing data
   await usersCol.deleteMany({});
   await societiesCol.deleteMany({});
   await billsCol.deleteMany({});
+  await invitationsCol.deleteMany({});
   console.log("Cleared existing data.");
 
   // Seed Users
   const usersToSeed = [
-    { email: "admin@example.com", name: "Admin User", role: "Admin", password: "password123" },
-    { email: "manager@example.com", name: "Manager User", role: "Manager", password: "password123" },
-    { email: "treasurer@example.com", name: "Treasurer User", role: "Treasurer", password: "password123" },
-    { email: "agent@example.com", name: "Agent User", role: "Agent", password: "password123" },
+    { email: "admin@example.com", name: "Admin User", role: "Admin" as UserRole, password: "password123" },
+    { email: "manager@example.com", name: "Manager User", role: "Manager" as UserRole, password: "password123" },
+    { email: "treasurer@example.com", name: "Treasurer User", role: "Treasurer" as UserRole, password: "password123" },
+    { email: "agent1@example.com", name: "Agent One", role: "Agent" as UserRole, password: "password123" },
+    { email: "agent2@example.com", name: "Agent Two", role: "Agent" as UserRole, password: "password123" },
   ];
 
   const insertedUsers = [];
   for (const userData of usersToSeed) {
+    const hashedPassword = await hashPassword(userData.password); // Hash password using bcrypt
     const user: UserDoc = {
       uid: Math.random().toString(36).substring(2, 15), // Simple unique ID
       ...userData,
-      password: Buffer.from(userData.password).toString('base64'), // Mimic b64 encoding
+      password: hashedPassword,
+      isEmailVerified: true,
+      isActive: true,
       createdAt: Date.now(),
     };
     await usersCol.insertOne(user);
@@ -87,6 +94,35 @@ async function seed() {
     const result = await societiesCol.insertOne(society);
     insertedSocieties.push({ ...society, _id: result.insertedId });
     console.log(`Seeded society: ${society.name}`);
+  }
+
+  // Associate the manager with the first society
+  if (managerUser && insertedSocieties.length > 0) {
+    await usersCol.updateOne(
+      { uid: managerUser.uid },
+      { $set: { associatedSocietyId: String(insertedSocieties[0]._id) } }
+    );
+    console.log(`Associated manager with society: ${insertedSocieties[0].name}`);
+  }
+
+  // Associate agents with societies
+  const agent1 = insertedUsers.find(u => u.email === "agent1@example.com");
+  const agent2 = insertedUsers.find(u => u.email === "agent2@example.com");
+  
+  if (agent1 && insertedSocieties.length > 0) {
+    await usersCol.updateOne(
+      { uid: agent1.uid },
+      { $set: { assignedSocieties: [String(insertedSocieties[0]._id)] } }
+    );
+    console.log(`Associated agent1 with society: ${insertedSocieties[0].name}`);
+  }
+  
+  if (agent2 && insertedSocieties.length > 1) {
+    await usersCol.updateOne(
+      { uid: agent2.uid },
+      { $set: { assignedSocieties: [String(insertedSocieties[1]._id)] } }
+    );
+    console.log(`Associated agent2 with society: ${insertedSocieties[1].name}`);
   }
 
   // Seed Bills
