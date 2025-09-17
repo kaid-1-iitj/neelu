@@ -17,7 +17,9 @@ export default function SiteHeader() {
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-md bg-primary shadow-[0_0_20px_rgba(138,43,226,0.6)]" />
-          <span className="text-lg font-bold tracking-tight">Society Ledgers</span>
+          <span className="text-lg font-bold tracking-tight">
+            Society Ledgers
+          </span>
         </Link>
         <nav className="hidden items-center gap-1 md:flex">
           <NavLink to="/dashboard" className={navLinkClass}>
@@ -42,9 +44,13 @@ export default function SiteHeader() {
                 {user.role}
               </Badge>
               <Link to="/dashboard">
-                <Button variant="secondary" className="bg-secondary">Dashboard</Button>
+                <Button variant="secondary" className="bg-secondary">
+                  Dashboard
+                </Button>
               </Link>
-              <Button onClick={() => signOut()} className="bg-primary">Sign out</Button>
+              <Button onClick={() => signOut()} className="bg-primary">
+                Sign out
+              </Button>
             </>
           ) : (
             <Link to="/auth">

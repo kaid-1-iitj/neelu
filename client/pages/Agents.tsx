@@ -5,9 +5,29 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getAgents, getSocieties, createAgent, terminateAgent, assignAgentToSociety, unassignAgentFromSociety } from "@/lib/api";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  getAgents,
+  getSocieties,
+  createAgent,
+  terminateAgent,
+  assignAgentToSociety,
+  unassignAgentFromSociety,
+} from "@/lib/api";
 
 export default function AgentsPage() {
   const { user } = useAuth();
@@ -51,7 +71,9 @@ export default function AgentsPage() {
             <CardTitle>Agents</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-foreground/70">You do not have access to this page.</p>
+            <p className="text-sm text-foreground/70">
+              You do not have access to this page.
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -71,7 +93,11 @@ export default function AgentsPage() {
               e.preventDefault();
               setCreating(true);
               try {
-                const created = await createAgent({ email: form.email, password: form.password, name: form.name || undefined });
+                const created = await createAgent({
+                  email: form.email,
+                  password: form.password,
+                  name: form.name || undefined,
+                });
                 setAgents((list) => [created, ...list]);
                 setForm({ name: "", email: "", password: "" });
               } catch (err) {
@@ -83,18 +109,41 @@ export default function AgentsPage() {
           >
             <div className="grid gap-2">
               <Label htmlFor="name">Name</Label>
-              <Input id="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="bg-background/60" required />
+              <Input
+                id="name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="bg-background/60"
+                required
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="bg-background/60" required />
+              <Input
+                id="email"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                className="bg-background/60"
+                required
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Temp Password</Label>
-              <Input id="password" type="password" minLength={6} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="bg-background/60" required />
+              <Input
+                id="password"
+                type="password"
+                minLength={6}
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                className="bg-background/60"
+                required
+              />
             </div>
             <div className="flex items-end">
-              <Button type="submit" disabled={creating} className="bg-primary">{creating ? "Creating..." : "Create Agent"}</Button>
+              <Button type="submit" disabled={creating} className="bg-primary">
+                {creating ? "Creating..." : "Create Agent"}
+              </Button>
             </div>
           </form>
           {error ? <p className="text-sm text-red-400 mt-3">{error}</p> : null}
@@ -124,7 +173,9 @@ export default function AgentsPage() {
                   const currentSoc = societiesByAgent.get(a.uid);
                   return (
                     <TableRow key={a.uid}>
-                      <TableCell className="font-medium">{a.name || "—"}</TableCell>
+                      <TableCell className="font-medium">
+                        {a.name || "—"}
+                      </TableCell>
                       <TableCell>{a.email}</TableCell>
                       <TableCell>
                         {a.isActive ? (
@@ -139,7 +190,8 @@ export default function AgentsPage() {
                           onValueChange={async (socId) => {
                             const prevId = currentSoc?.id;
                             try {
-                              if (prevId) await unassignAgentFromSociety(prevId);
+                              if (prevId)
+                                await unassignAgentFromSociety(prevId);
                               await assignAgentToSociety(socId, a.uid);
                               const updated = await getSocieties();
                               setSocieties(updated);
@@ -167,7 +219,13 @@ export default function AgentsPage() {
                           onClick={async () => {
                             try {
                               await terminateAgent(a.uid);
-                              setAgents((list) => list.map((x) => (x.uid === a.uid ? { ...x, isActive: false } : x)));
+                              setAgents((list) =>
+                                list.map((x) =>
+                                  x.uid === a.uid
+                                    ? { ...x, isActive: false }
+                                    : x,
+                                ),
+                              );
                               const updated = await getSocieties();
                               setSocieties(updated);
                             } catch {

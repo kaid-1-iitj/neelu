@@ -125,7 +125,10 @@ export interface AgentListItem {
 }
 
 export interface CreateBillRequest
-  extends Pick<BillDoc, "societyId" | "vendorName" | "transactionNature" | "amount" | "dueDate"> {
+  extends Pick<
+    BillDoc,
+    "societyId" | "vendorName" | "transactionNature" | "amount" | "dueDate"
+  > {
   attachments?: { fileName: string; fileURL: string }[];
 }
 
