@@ -40,3 +40,17 @@ export const createBill = (payload: {
 }) => api<{ id: string }>("/api/bills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 export const updateBillStatus = (billId: string, payload: { status: string; remark?: string }) =>
   api<{ ok: true }>(`/api/bills/${billId}/status`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+
+// Agents
+export const getAgents = () => api<any[]>("/api/agents");
+export const createAgent = (payload: { email: string; password: string; name?: string }) =>
+  api<{ uid: string; email: string; name?: string; role: string; isActive: boolean }>("/api/agents", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+export const terminateAgent = (uid: string) => api<{ ok: true }>(`/api/agents/${uid}/terminate`, { method: "PUT" });
+export const assignAgentToSociety = (societyId: string, agentUid: string) =>
+  api<{ ok: true }>(`/api/societies/${societyId}/assign-agent`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agentUid }) });
+export const unassignAgentFromSociety = (societyId: string) =>
+  api<{ ok: true }>(`/api/societies/${societyId}/unassign-agent`, { method: "PUT" });
