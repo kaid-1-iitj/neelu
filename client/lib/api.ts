@@ -1,5 +1,5 @@
 import { getToken } from "./auth";
-import type { ExpenseReport, ExpenseReportFilters, UpdateSocietyRequest, AddSocietyMemberRequest, SocietyMemberInfo, SendOTPRequest, VerifyOTPRequest } from "../../shared/api";
+import type { ExpenseReport, ExpenseReportFilters, UpdateSocietyRequest, AddSocietyMemberRequest, SocietyMemberInfo, SendOTPRequest, VerifyOTPRequest, OnboardSocietyRequest, ProposeSocietyUpdateRequest } from "../../shared/api";
 
 export type ReportsResponse = { pending: number; approved: number };
 
@@ -54,6 +54,15 @@ export const createBill = (payload: {
 }) => api<{ id: string }>("/api/bills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 export const updateBillStatus = (billId: string, payload: { status: string; remark?: string }) =>
   api<{ ok: true }>(`/api/bills/${billId}/status`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+
+export const getBill = (billId: string) => api<any>(`/api/bills/${billId}`);
+export const getBillRemarks = (billId: string) => api<Array<{ text: string; authorId: string; authorName: string; authorRole: string; timestamp: number; previousStatus?: string; newStatus?: string }>>(`/api/bills/${billId}/remarks`);
+export const addBillRemark = (billId: string, text: string) =>
+  api<{ ok: true }>(`/api/bills/${billId}/remarks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
 
 export const getExpenseReport = (filters?: ExpenseReportFilters) => {
   const params = new URLSearchParams();
@@ -116,6 +125,27 @@ export async function uploadFiles(files: File[]): Promise<string[]> {
 
 export const verifyOTP = (data: VerifyOTPRequest) =>
   api<{ message: string }>("/api/verify-otp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+// Society onboarding
+export const onboardSociety = (data: OnboardSocietyRequest) =>
+  api<{ id: string; approvalStatus: "Pending" }>("/api/societies/onboard", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+export const approveSociety = (societyId: string) =>
+  api<any>(`/api/societies/${societyId}/approve`, { method: "PUT" });
+
+// My society APIs
+export const getSociety = (societyId: string) => api<any>(`/api/societies/${societyId}`);
+export const getSocietyAgent = (societyId: string) => api<{ uid: string; name: string; email: string } | null>(`/api/societies/${societyId}/agent`);
+export const proposeSocietyUpdate = (societyId: string, data: ProposeSocietyUpdateRequest) =>
+  api<{ success: boolean; message: string }>(`/api/societies/${societyId}/propose-update`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),

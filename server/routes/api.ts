@@ -48,7 +48,7 @@ router.post("/send-otp", async (req, res) => {
     phone: result.data.phone,
   });
   if (response.success) {
-    return res.json({ message: response.message });
+    return res.json({ message: response.message, otp: response.otp });
   } else {
     return res.status(400).json({ error: response.message });
   }
@@ -413,6 +413,88 @@ router.put("/societies/:id", requireAuth(["Admin"]), async (req, res) => {
   return res.json(serialize(updatedSociety!));
 });
 
+// Member proposes an update to their society
+router.post("/societies/:id/propose-update", requireAuth(["Manager", "Treasurer", "Secretary", "President"]), async (req, res) => {
+  const id = toId(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  const Schema = z.object({
+    name: z.string().min(1).optional(),
+    address: z.object({
+      street: z.string().min(1),
+      city: z.string().min(1),
+      state: z.string().min(1),
+      zip: z.string().min(1),
+    }).optional(),
+    contactInfo: z.object({ phone: z.string().optional(), email: z.string().email().optional() }).optional(),
+  }).strict();
+  const result = Schema.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({ error: "Invalid request body", details: result.error.issues });
+  }
+
+  const user = (req as any).user;
+  const usersCollection = await usersCol();
+  const currentUser = await usersCollection.findOne({ uid: user.uid });
+  if (!currentUser || !currentUser.associatedSocietyId || String(id) !== currentUser.associatedSocietyId) {
+    return res.status(403).json({ error: "You can only propose updates for your own society" });
+  }
+
+  const col = await societiesCol();
+  const society = await col.findOne({ _id: id });
+  if (!society) return res.status(404).json({ error: "Society not found" });
+
+  const pendingUpdate: any = { ...result.data, updatedAt: Date.now(), updatedBy: user.uid };
+  await col.updateOne({ _id: id }, { $set: { pendingUpdate } });
+  return res.json({ success: true, message: "Update proposed. Awaiting admin approval." });
+});
+
+// Admin approves or rejects a pending update
+router.put("/societies/:id/pending-update", requireAuth(["Admin"]), async (req, res) => {
+  const id = toId(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  const Schema = z.object({ action: z.enum(["approve", "reject"]) });
+  const { action } = Schema.parse(req.body);
+
+  const col = await societiesCol();
+  const society = await col.findOne({ _id: id });
+  if (!society) return res.status(404).json({ error: "Society not found" });
+  if (!society.pendingUpdate) return res.status(400).json({ error: "No pending update" });
+
+  if (action === "approve") {
+    const update: any = {};
+    if (society.pendingUpdate.name !== undefined) update.name = society.pendingUpdate.name;
+    if (society.pendingUpdate.address !== undefined) update.address = society.pendingUpdate.address;
+    if (society.pendingUpdate.contactInfo !== undefined) update.contactInfo = society.pendingUpdate.contactInfo;
+    await col.updateOne({ _id: id }, { $set: update, $unset: { pendingUpdate: "" } });
+  } else {
+    await col.updateOne({ _id: id }, { $unset: { pendingUpdate: "" } });
+  }
+
+  const updated = await col.findOne({ _id: id });
+  return res.json(serialize(updated!));
+});
+
+// Get assigned agent minimal info
+router.get("/societies/:id/agent", requireAuth(["Admin", "Agent", "Manager", "Treasurer", "Secretary", "President"]), async (req, res) => {
+  const id = toId(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  const col = await societiesCol();
+  const society = await col.findOne({ _id: id });
+  if (!society) return res.status(404).json({ error: "Not found" });
+
+  const user = (req as any).user;
+  const accessibleSocieties = await getUserAccessibleSocieties(user);
+  if (!accessibleSocieties.includes(String(id))) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  if (!society.assignedAgentId) return res.json(null);
+  const usersCollection = await usersCol();
+  const agent = await usersCollection.findOne({ uid: society.assignedAgentId });
+  if (!agent) return res.json(null);
+  return res.json({ uid: agent.uid, name: agent.name, email: agent.email });
+});
+
 router.get("/societies/:id/members", requireAuth(["Admin"]), async (req, res) => {
   const id = toId(req.params.id);
   if (!id) return res.status(400).json({ error: "Invalid id" });
@@ -512,6 +594,55 @@ router.delete("/societies/:id/members/:userId", requireAuth(["Admin"]), async (r
   return res.json({ message: "Member removed successfully" });
 });
 
+// Onboard society (member self-service)
+router.post("/societies/onboard", requireAuth(["Manager", "Treasurer", "Secretary", "President"]), async (req, res) => {
+  const Schema = z.object({
+    name: z.string().min(1),
+    address: z.object({ street: z.string().min(1), city: z.string().min(1), state: z.string().min(1), zip: z.string().min(1) }).strict(),
+    contactInfo: z.object({ phone: z.string().optional(), email: z.string().email().optional() })
+  });
+  const body = Schema.parse(req.body);
+
+  const user = (req as any).user;
+  const usersCollection = await usersCol();
+  const currentUser = await usersCollection.findOne({ uid: user.uid });
+  if (!currentUser) return res.status(401).json({ error: "Unauthorized" });
+
+  if (currentUser.associatedSocietyId) {
+    return res.status(400).json({ error: "You are already associated with a society" });
+  }
+
+  const col = await societiesCol();
+  const doc: SocietyDoc = {
+    name: body.name,
+    address: body.address as any,
+    contactInfo: body.contactInfo,
+    isActive: false,
+    approvalStatus: "Pending",
+    createdAt: Date.now(),
+  };
+  const result = await col.insertOne(doc as any);
+  const societyId = String(result.insertedId);
+
+  await usersCollection.updateOne({ uid: user.uid }, { $set: { associatedSocietyId: societyId } });
+
+  return res.status(201).json({ id: societyId, approvalStatus: "Pending" });
+});
+
+// Approve society (Admin)
+router.put("/societies/:id/approve", requireAuth(["Admin"]), async (req, res) => {
+  const id = toId(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+
+  const col = await societiesCol();
+  const updated = await col.updateOne({ _id: id }, { $set: { approvalStatus: "Approved", isActive: true, activationTimestamp: Date.now() } });
+  if (updated.matchedCount === 0) {
+    return res.status(404).json({ error: "Society not found" });
+  }
+  const society = await col.findOne({ _id: id });
+  return res.json(serialize(society!));
+});
+
 // Bills
 router.post("/bills", requireAuth(["Admin", "Manager", "Treasurer", "Secretary", "President"]), async (req, res) => {
   const Schema = z.object({
@@ -526,6 +657,14 @@ router.post("/bills", requireAuth(["Admin", "Manager", "Treasurer", "Secretary",
     })).optional(),
   });
   const body = Schema.parse(req.body);
+
+  // Ensure society is approved
+  const societiesCollection = await societiesCol();
+  const society = await societiesCollection.findOne({ _id: new ObjectId(body.societyId) });
+  if (!society) return res.status(400).json({ error: "Invalid society" });
+  if (society.approvalStatus !== "Approved") {
+    return res.status(403).json({ error: "Society is not approved yet" });
+  }
 
   const col = await billsCol();
   const doc = {
@@ -544,13 +683,8 @@ router.post("/bills", requireAuth(["Admin", "Manager", "Treasurer", "Secretary",
   
   // Send email notifications
   try {
-    const societiesCollection = await societiesCol();
-    const society = await societiesCollection.findOne({ _id: new ObjectId(body.societyId) });
-    
     if (society) {
       const usersCollection = await usersCol();
-      
-      // Get society members and assigned agents
       const members = await usersCollection.find({
         $or: [
           { associatedSocietyId: body.societyId },
@@ -558,9 +692,7 @@ router.post("/bills", requireAuth(["Admin", "Manager", "Treasurer", "Secretary",
         ],
         isActive: true
       }).toArray();
-      
       const recipientEmails = members.map(member => member.email);
-      
       if (recipientEmails.length > 0) {
         await sendExpenseNotification(
           society.name,
@@ -576,7 +708,6 @@ router.post("/bills", requireAuth(["Admin", "Manager", "Treasurer", "Secretary",
     }
   } catch (error) {
     console.error("Failed to send email notification:", error);
-    // Don't fail the request if email fails
   }
   
   return res.status(201).json({ id: String(result.insertedId) });
@@ -679,7 +810,44 @@ router.put("/bills/:billId/status", requireAuth(["Admin", "Manager", "Treasurer"
   return res.json({ ok: true });
 });
 
-router.post("/bills/:billId/remarks", requireAuth(["Agent", "Manager", "Treasurer", "Secretary", "President"]), async (req, res) => {
+router.get("/bills/:billId/remarks", requireAuth(["Admin", "Agent", "Manager", "Treasurer", "Secretary", "President"]), async (req, res) => {
+  const id = toId(req.params.billId);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+
+  const user = (req as any).user;
+  const accessibleSocieties = await getUserAccessibleSocieties(user);
+
+  const col = await billsCol();
+  const bill = await col.findOne({ _id: id });
+  if (!bill) return res.status(404).json({ error: "Not found" });
+
+  if (!accessibleSocieties.includes(bill.societyId)) {
+    return res.status(403).json({ error: "Access denied to this bill" });
+  }
+
+  // Enrich remarks with author name and role
+  const usersCollection = await usersCol();
+  const authorsMap = new Map<string, { name: string; role: string }>();
+  const authorIds = Array.from(new Set((bill.remarks || []).map((r: any) => r.authorId).filter(Boolean)));
+  if (authorIds.length) {
+    const authors = await usersCollection.find({ uid: { $in: authorIds } }).toArray();
+    for (const a of authors) authorsMap.set(a.uid, { name: a.name, role: a.role });
+  }
+
+  const remarks = (bill.remarks || []).map((r: any) => ({
+    text: r.text,
+    authorId: r.authorId,
+    authorName: authorsMap.get(r.authorId)?.name || "Unknown",
+    authorRole: authorsMap.get(r.authorId)?.role || r.authorRole || "",
+    timestamp: r.timestamp,
+    previousStatus: r.previousStatus,
+    newStatus: r.newStatus,
+  }));
+
+  return res.json(remarks);
+});
+
+router.post("/bills/:billId/remarks", requireAuth(["Admin", "Agent", "Manager", "Treasurer", "Secretary", "President"]), async (req, res) => {
   const id = toId(req.params.billId);
   if (!id) return res.status(400).json({ error: "Invalid id" });
   const Body = z.object({ text: z.string().min(1) });
@@ -687,15 +855,67 @@ router.post("/bills/:billId/remarks", requireAuth(["Agent", "Manager", "Treasure
   const col = await billsCol();
   const existing = await col.findOne({ _id: id });
   if (!existing) return res.status(404).json({ error: "Not found" });
+
+  const user = (req as any).user;
+
+  // Ensure the user has access to this bill's society
+  const accessibleSocieties = await getUserAccessibleSocieties(user);
+  if (!accessibleSocieties.includes(existing.societyId)) {
+    return res.status(403).json({ error: "Access denied to this bill" });
+  }
+
   const previousStatus = existing.status as BillStatus;
   const remark = {
     text,
-    authorId: (req as any).user?.uid || "unknown",
-    authorRole: (req as any).user?.role || "Agent",
+    authorId: user?.uid || "unknown",
+    authorRole: user?.role || "Agent",
     timestamp: Date.now(),
     previousStatus,
   };
   await col.updateOne({ _id: id }, { $push: { remarks: remark as any } });
+
+  // Send email notifications to society members and assigned agents
+  try {
+    const societiesCollection = await societiesCol();
+    const society = await societiesCollection.findOne({ _id: new ObjectId(existing.societyId) });
+
+    if (society) {
+      const usersCollection = await usersCol();
+
+      const members = await usersCollection.find({
+        $or: [
+          { associatedSocietyId: existing.societyId },
+          { assignedSocieties: existing.societyId }
+        ],
+        isActive: true
+      }).toArray();
+
+      const recipientEmails = members.map(m => m.email);
+
+      if (recipientEmails.length > 0) {
+        const { sendRemarkNotification } = await import("../services/emailService");
+        await sendRemarkNotification(
+          society.name,
+          {
+            vendorName: existing.vendorName,
+            amount: existing.amount,
+            transactionNature: existing.transactionNature,
+          },
+          {
+            authorName: user?.name || user?.email || remark.authorId,
+            authorRole: remark.authorRole,
+            text,
+            timestamp: remark.timestamp,
+          },
+          recipientEmails
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Failed to send remark notification:", error);
+    // Do not fail request on email failure
+  }
+
   return res.json({ ok: true });
 });
 
@@ -714,6 +934,13 @@ router.post("/societies/:societyId/invite-member", requireAuth(["Manager", "Trea
   const currentUser = await usersCollection.findOne({ uid: user.uid });
   if (!currentUser || currentUser.associatedSocietyId !== societyId) {
     return res.status(403).json({ error: "You can only invite members to your own society" });
+  }
+
+  // Ensure society is approved
+  const societiesCollection = await societiesCol();
+  const society = await societiesCollection.findOne({ _id: new ObjectId(societyId) });
+  if (!society || society.approvalStatus !== "Approved") {
+    return res.status(403).json({ error: "Society is not approved yet" });
   }
 
   // Check if email is already registered

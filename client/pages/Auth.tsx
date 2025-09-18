@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import type { UserRole } from "../../shared/api";
+import { onboardSociety } from "@/lib/api";
 
 export default function AuthPage() {
   return (
@@ -104,6 +105,15 @@ function SignupForm() {
   const [otpSent, setOtpSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [addSociety, setAddSociety] = useState<boolean>(false);
+  const [societyName, setSocietyName] = useState("");
+  const [street, setStreet] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [zip, setZip] = useState("");
+  const [societyEmail, setSocietyEmail] = useState("");
+  const [societyPhone, setSocietyPhone] = useState("");
+  const [pendingMsg, setPendingMsg] = useState<string | null>(null);
 
   const roles: UserRole[] = ["Manager", "Treasurer", "Secretary", "President"];
 
@@ -132,16 +142,36 @@ function SignupForm() {
     setLoading(true);
     try {
       await signUp(email, password, name, role, otp);
-      navigate("/dashboard");
+      if (addSociety) {
+        try {
+          const res = await onboardSociety({
+            name: societyName,
+            address: { street, city, state, zip },
+            contactInfo: { email: societyEmail || undefined, phone: societyPhone || undefined },
+          });
+          setPendingMsg(
+            `Your society approval is pending from admin. Please contact administrator at email: noreply@societyledgers.com. (Request ID: ${res.id})`
+          );
+        } catch (err: any) {
+          setError(err?.message || "Failed to submit society for approval");
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err: any) {
       setError(err?.message || "Signup failed");
     } finally {
-      setLoading(false);
+      if (!addSociety) setLoading(false);
     }
   };
 
   return (
     <form className="grid gap-4" onSubmit={handleSignup}>
+      {pendingMsg ? (
+        <div className="text-sm text-foreground bg-background/60 border border-border/60 rounded p-3">{pendingMsg}</div>
+      ) : null}
       <div className="grid gap-2">
         <Label htmlFor="name">Name</Label>
         <Input
@@ -221,6 +251,50 @@ function SignupForm() {
       </div>
 
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
+      {/* Society Details Opt-in */}
+      <div className="mt-2 space-y-3">
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={addSociety} onChange={(e) => setAddSociety(e.target.checked)} />
+          Provide society details now (send for admin approval)
+        </label>
+        {addSociety ? (
+          <div className="grid gap-3 border border-border/60 rounded-md p-3 bg-background/40">
+            <div className="grid gap-2">
+              <Label>Society Name</Label>
+              <Input value={societyName} onChange={(e) => setSocietyName(e.target.value)} required className="bg-background/60" />
+            </div>
+            <div className="grid md:grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label>Street</Label>
+                <Input value={street} onChange={(e) => setStreet(e.target.value)} required className="bg-background/60" />
+              </div>
+              <div className="grid gap-2">
+                <Label>City</Label>
+                <Input value={city} onChange={(e) => setCity(e.target.value)} required className="bg-background/60" />
+              </div>
+              <div className="grid gap-2">
+                <Label>State</Label>
+                <Input value={state} onChange={(e) => setState(e.target.value)} required className="bg-background/60" />
+              </div>
+              <div className="grid gap-2">
+                <Label>Zip</Label>
+                <Input value={zip} onChange={(e) => setZip(e.target.value)} required className="bg-background/60" />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label>Contact Email</Label>
+                <Input type="email" value={societyEmail} onChange={(e) => setSocietyEmail(e.target.value)} className="bg-background/60" />
+              </div>
+              <div className="grid gap-2">
+                <Label>Contact Phone</Label>
+                <Input value={societyPhone} onChange={(e) => setSocietyPhone(e.target.value)} className="bg-background/60" />
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
       <Button type="submit" disabled={loading || !otpSent || !otp} className="bg-accent">
         {loading ? "Creating..." : "Create account"}
       </Button>

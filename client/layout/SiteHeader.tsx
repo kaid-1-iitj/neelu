@@ -49,6 +49,11 @@ export default function SiteHeader() {
               Invitations
             </NavLink>
           )}
+          {user && ["Manager", "Treasurer", "Secretary", "President"].includes(user.role) && (
+            <NavLink to="/my-society" className={navLinkClass}>
+              Society
+            </NavLink>
+          )}
         </nav>
         <div className="flex items-center gap-3">
           {user ? (

@@ -95,3 +95,47 @@ Society Ledgers Team
     htmlBody,
   });
 }
+
+export async function sendRemarkNotification(
+  societyName: string,
+  billInfo: { vendorName: string; amount: number; transactionNature: string },
+  remarkInfo: { authorName: string; authorRole: string; text: string; timestamp: number },
+  recipients: string[]
+): Promise<boolean> {
+  const subject = `New Remark on Bill - ${societyName}`;
+  const body = `
+A new remark has been added in ${societyName}:
+
+Bill: ${billInfo.vendorName} • ${billInfo.transactionNature} • ₹${billInfo.amount.toLocaleString()}
+By: ${remarkInfo.authorName} (${remarkInfo.authorRole}) at ${new Date(remarkInfo.timestamp).toLocaleString()}
+
+"${remarkInfo.text}"
+
+Please review this in the Society Ledgers system.
+
+Best regards,
+Society Ledgers Team
+  `;
+
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #333;">New Remark on Bill - ${societyName}</h2>
+      <p>A new remark has been added in <strong>${societyName}</strong>:</p>
+      <div style="background-color: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
+        <p><strong>Bill:</strong> ${billInfo.vendorName} • ${billInfo.transactionNature} • ₹${billInfo.amount.toLocaleString()}</p>
+        <p><strong>By:</strong> ${remarkInfo.authorName} (${remarkInfo.authorRole})</p>
+        <p><strong>At:</strong> ${new Date(remarkInfo.timestamp).toLocaleString()}</p>
+        <blockquote style="margin: 0; padding-left: 12px; border-left: 3px solid #ddd; color: #333;">${remarkInfo.text}</blockquote>
+      </div>
+      <p>Please review this in the Society Ledgers system.</p>
+      <p style="color: #666; font-size: 14px;">Best regards,<br>Society Ledgers Team</p>
+    </div>
+  `;
+
+  return sendEmailNotification({
+    to: recipients,
+    subject,
+    body,
+    htmlBody,
+  });
+}

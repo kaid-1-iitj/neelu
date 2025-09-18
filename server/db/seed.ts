@@ -19,7 +19,11 @@ if (!DB_NAME) {
 }
 
 async function getCollection<T>(collectionName: string): Promise<Collection<T>> {
-  const client = new MongoClient(MONGODB_URI as string);
+  const isProduction = process.env.NODE_ENV === "production";
+  const clientOptions = isProduction
+    ? {}
+    : { tlsAllowInvalidCertificates: true, tlsAllowInvalidHostnames: true };
+  const client = new MongoClient(MONGODB_URI as string, clientOptions as any);
   await client.connect();
   const db = client.db(DB_NAME);
   return db.collection<T>(collectionName);

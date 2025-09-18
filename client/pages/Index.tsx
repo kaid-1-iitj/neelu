@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { getReports, getSocieties } from "@/lib/api";
 
 export default function Index() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user && ["Manager", "Treasurer", "Secretary", "President"].includes(user.role)) {
+      navigate("/onboarding", { replace: false });
+    }
+  }, [user, navigate]);
   const [pending, setPending] = useState<number | null>(null);
   const [approved, setApproved] = useState<number | null>(null);
   const [societies, setSocieties] = useState<number | null>(null);

@@ -16,6 +16,8 @@ import MemberInvitations from "./pages/MemberInvitations";
 import AcceptInvitation from "./pages/AcceptInvitation";
 import ExpenseReports from "./pages/ExpenseReports";
 import Societies from "./pages/Societies";
+import SocietyOnboarding from "./pages/SocietyOnboarding";
+import MySociety from "./pages/MySociety";
 import Debug from "./pages/Debug";
 import SiteLayout from "./layout/SiteLayout";
 import { AuthProvider } from "@/context/AuthContext";
@@ -39,6 +41,8 @@ const App = () => (
               <Route path="/reports" element={<Reports />} />
               <Route path="/agents" element={<Agents />} />
               <Route path="/societies" element={<Societies />} />
+              <Route path="/onboarding" element={<SocietyOnboarding />} />
+              <Route path="/my-society" element={<MySociety />} />
               <Route path="/invitations" element={<MemberInvitations />} />
               <Route path="/expense-reports" element={<ExpenseReports />} />
               <Route path="/debug" element={<Debug />} />

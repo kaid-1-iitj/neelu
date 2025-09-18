@@ -9,7 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
 import { useAuth } from "@/context/AuthContext";
-import { createBill, getBills, getSocieties, updateBillStatus, createSociety, uploadFiles } from "@/lib/api";
+import { createBill, getBills, getSocieties, updateBillStatus, createSociety, uploadFiles, addBillRemark, getBillRemarks, getBill } from "@/lib/api";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const statuses = ["Pending", "Under Review", "Clarification Required", "Approved", "Rejected"] as const;
 type BillStatus = typeof statuses[number];
@@ -26,6 +28,10 @@ export default function Bills() {
   const [status, setStatus] = useState<BillStatus | undefined>(undefined);
   const [reviewBill, setReviewBill] = useState<any | null>(null);
   const [addBillOpen, setAddBillOpen] = useState(false);
+  const [remarksBillId, setRemarksBillId] = useState<string | null>(null);
+  const [remarks, setRemarks] = useState<Array<{ text: string; authorId: string; authorName: string; authorRole: string; timestamp: number; previousStatus?: string; newStatus?: string }>>([]);
+  const [remarksLoading, setRemarksLoading] = useState(false);
+  const [newRemark, setNewRemark] = useState("");
 
   const canReview = !!user && (reviewerRoles as readonly string[]).includes(user.role);
 
@@ -164,11 +170,33 @@ export default function Bills() {
                     </TableCell>
                     <TableCell className="text-right">
                       {canReview ? (
-                        <Button variant="secondary" size="sm" className="bg-secondary" onClick={() => setReviewBill(b)}>Review</Button>
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="outline" size="sm" onClick={async () => {
+                            setRemarksBillId(b.id);
+                            setRemarksLoading(true);
+                            try {
+                              const list = await getBillRemarks(b.id);
+                              setRemarks(list);
+                            } finally {
+                              setRemarksLoading(false);
+                            }
+                          }}>Remarks</Button>
+                          <Button variant="secondary" size="sm" className="bg-secondary" onClick={() => setReviewBill(b)}>Review</Button>
+                        </div>
                       ) : (
-                        <Button variant="secondary" size="sm" className="bg-secondary" disabled>
-                          View
-                        </Button>
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="outline" size="sm" onClick={async () => {
+                            setRemarksBillId(b.id);
+                            setRemarksLoading(true);
+                            try {
+                              const list = await getBillRemarks(b.id);
+                              setRemarks(list);
+                            } finally {
+                              setRemarksLoading(false);
+                            }
+                          }}>Remarks</Button>
+                          <Button variant="secondary" size="sm" className="bg-secondary" disabled>View</Button>
+                        </div>
                       )}
                     </TableCell>
                   </TableRow>
@@ -195,6 +223,67 @@ export default function Bills() {
             setReviewBill(null);
           }}
         />
+      ) : null}
+
+      {remarksBillId ? (
+        <Dialog open onOpenChange={(open) => { if (!open) { setRemarksBillId(null); setRemarks([]); setNewRemark(""); } }}>
+          <DialogContent className="bg-background/95 border-border/60 max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Remarks</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-3">
+              <div className="text-sm text-muted-foreground">All remarks on this bill. Notifications are sent when new remarks are added.</div>
+              <Separator />
+              <ScrollArea className="h-64 pr-3">
+                <div className="flex flex-col gap-3">
+                  {remarksLoading ? (
+                    <div className="text-sm text-muted-foreground">Loading...</div>
+                  ) : remarks.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No remarks yet.</div>
+                  ) : (
+                    remarks
+                      .sort((a, b) => a.timestamp - b.timestamp)
+                      .map((r, idx) => (
+                        <div key={idx} className="rounded-md border border-border/60 p-3 bg-card/60">
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <div>
+                              <span className="font-medium text-foreground">{r.authorName}</span>
+                              <span> ({r.authorRole})</span>
+                            </div>
+                            <div>{new Date(r.timestamp).toLocaleString()}</div>
+                          </div>
+                          <div className="mt-2 text-sm whitespace-pre-wrap">{r.text}</div>
+                          {(r.previousStatus || r.newStatus) ? (
+                            <div className="mt-2 text-xs text-muted-foreground">{r.previousStatus ? `Previous: ${r.previousStatus}` : ""}{r.previousStatus && r.newStatus ? " → " : ""}{r.newStatus ? `New: ${r.newStatus}` : ""}</div>
+                          ) : null}
+                        </div>
+                      ))
+                  )}
+                </div>
+              </ScrollArea>
+              <form
+                className="flex items-center gap-2"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!remarksBillId || !newRemark.trim()) return;
+                  const text = newRemark.trim();
+                  await addBillRemark(remarksBillId, text);
+                  setNewRemark("");
+                  const list = await getBillRemarks(remarksBillId);
+                  setRemarks(list);
+                }}
+              >
+                <Input
+                  placeholder="Add a remark..."
+                  value={newRemark}
+                  onChange={(e) => setNewRemark(e.target.value)}
+                  className="bg-background/60"
+                />
+                <Button type="submit" className="bg-primary">Add</Button>
+              </form>
+            </div>
+          </DialogContent>
+        </Dialog>
       ) : null}
     </div>
   );

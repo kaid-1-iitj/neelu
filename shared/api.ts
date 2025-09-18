@@ -37,9 +37,12 @@ export interface SocietyDoc {
   address: SocietyAddress;
   contactInfo: SocietyContactInfo;
   isActive: boolean;
+  approvalStatus?: "Pending" | "Approved" | "Rejected";
   activationTimestamp?: number; // epoch ms
   assignedAgentId?: string;
   createdAt: number; // epoch ms
+  // Proposed updates awaiting admin approval
+  pendingUpdate?: Partial<Pick<SocietyDoc, "name" | "address" | "contactInfo" >> & { updatedAt: number; updatedBy: string };
 }
 
 export interface UserDoc {
@@ -107,6 +110,12 @@ export interface CreateSocietyRequest {
   address: SocietyAddress;
   contactInfo: SocietyContactInfo;
   members: { role: Exclude<UserRole, "Admin" | "Agent">; email: string }[];
+}
+
+export interface OnboardSocietyRequest {
+  name: string;
+  address: SocietyAddress;
+  contactInfo: SocietyContactInfo;
 }
 
 export interface AssignAgentRequest {
@@ -218,6 +227,12 @@ export interface UpdateSocietyRequest {
   address?: SocietyAddress;
   contactInfo?: SocietyContactInfo;
   isActive?: boolean;
+}
+
+export interface ProposeSocietyUpdateRequest {
+  name?: string;
+  address?: SocietyAddress;
+  contactInfo?: SocietyContactInfo;
 }
 
 export interface AddSocietyMemberRequest {

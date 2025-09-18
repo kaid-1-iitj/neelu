@@ -7,8 +7,9 @@ dotenv.config();
 
 const OTP_SERVICE_API_KEY = process.env.OTP_SERVICE_API_KEY;
 const OTP_SERVICE_URL = process.env.OTP_SERVICE_URL;
+const OTP_DEBUG = process.env.OTP_DEBUG === "true";
 
-export async function sendOTP(request: SendOTPRequest): Promise<{ success: boolean; message: string }> {
+export async function sendOTP(request: SendOTPRequest): Promise<{ success: boolean; message: string; otp?: string }> {
   // Generate 6-digit OTP
   const otp = crypto.randomInt(100000, 999999).toString();
   const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
@@ -33,7 +34,7 @@ export async function sendOTP(request: SendOTPRequest): Promise<{ success: boole
     await otpCol.insertOne(otpDoc);
 
     // Send OTP via external service if configured
-    if (OTP_SERVICE_API_KEY && OTP_SERVICE_URL && OTP_SERVICE_API_KEY !== "your_otp_service_api_key_here") {
+    if (!OTP_DEBUG && OTP_SERVICE_API_KEY && OTP_SERVICE_URL && OTP_SERVICE_API_KEY !== "your_otp_service_api_key_here") {
       const response = await fetch(`${OTP_SERVICE_URL}/send-otp`, {
         method: "POST",
         headers: {
@@ -57,7 +58,7 @@ export async function sendOTP(request: SendOTPRequest): Promise<{ success: boole
       console.log(`OTP for ${request.email}: ${otp}`);
     }
 
-    return { success: true, message: "OTP sent successfully" };
+    return { success: true, message: "OTP sent successfully", otp: OTP_DEBUG ? otp : undefined };
   } catch (error) {
     console.error("Failed to send OTP:", error);
     return { success: false, message: "Failed to send OTP" };

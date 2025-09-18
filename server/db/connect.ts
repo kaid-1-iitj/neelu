@@ -17,7 +17,13 @@ export async function connectToDatabase() {
   }
 
   if (!client) {
-    client = new MongoClient(MONGODB_URI);
+    // In development, allow self-signed certificates to avoid TLS errors
+    const isProduction = process.env.NODE_ENV === "production";
+    const clientOptions = isProduction
+      ? {}
+      : { tlsAllowInvalidCertificates: true, tlsAllowInvalidHostnames: true };
+
+    client = new MongoClient(MONGODB_URI, clientOptions as any);
     await client.connect();
   }
   return client.db(DB_NAME);
