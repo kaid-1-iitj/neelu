@@ -150,3 +150,43 @@ export const proposeSocietyUpdate = (societyId: string, data: ProposeSocietyUpda
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
+
+// Advance Payments API functions
+export const getAdvancePayments = (params?: { societyId?: string; status?: string }) => {
+  const qs = new URLSearchParams();
+  if (params?.societyId) qs.set("societyId", params.societyId);
+  if (params?.status) qs.set("status", params.status);
+  const url = "/api/advance-payments" + (qs.toString() ? `?${qs.toString()}` : "");
+  return api<any[]>(url);
+};
+
+export const createAdvancePayment = (payload: {
+  societyId: string;
+  billId?: string;
+  totalAmountNeeded: number;
+  requestedAmount: number;
+  remarks?: string;
+}) =>
+  api<{ id: string }>("/api/advance-payments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+export const getAdvancePayment = (advancePaymentId: string) =>
+  api<any>(`/api/advance-payments/${advancePaymentId}`);
+
+export const updateAdvancePayment = (
+  advancePaymentId: string,
+  payload: {
+    status: "Pending" | "Approved" | "Rejected" | "Partially Approved";
+    approvedAmount?: number;
+    receivedAmount?: number;
+    remarks?: string;
+  }
+) =>
+  api<any>(`/api/advance-payments/${advancePaymentId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });

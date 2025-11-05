@@ -1,4 +1,4 @@
-import type { BillDoc, RemarkDoc, SocietyDoc, UserDoc, MemberInvitationDoc, OTPVerificationDoc } from "@shared/api";
+import type { BillDoc, RemarkDoc, SocietyDoc, UserDoc, MemberInvitationDoc, OTPVerificationDoc, AdvancePaymentDoc } from "@shared/api";
 import type { Collection } from "mongodb";
 import { connectToDatabase } from "./connect";
 
@@ -25,4 +25,9 @@ export async function memberInvitations(): Promise<Collection<MemberInvitationDo
 export async function otpVerifications(): Promise<Collection<OTPVerificationDoc>> {
   const db = await connectToDatabase();
   return db.collection<OTPVerificationDoc>("otpVerifications");
+}
+
+export async function advancePayments(): Promise<Collection<AdvancePaymentDoc>> {
+  const db = await connectToDatabase();
+  return db.collection<AdvancePaymentDoc>("advancePayments");
 }

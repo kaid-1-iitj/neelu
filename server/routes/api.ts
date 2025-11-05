@@ -3,9 +3,9 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { requireAuth, hashPassword, comparePassword, AuthUser, generateToken } from "../middleware/auth";
-import { societies as societiesCol, bills as billsCol, users as usersCol, memberInvitations as invitationsCol, otpVerifications as otpCol } from "../db/collections";
+import { societies as societiesCol, bills as billsCol, users as usersCol, memberInvitations as invitationsCol, otpVerifications as otpCol, advancePayments as advancePaymentsCol } from "../db/collections";
 import { z } from "zod";
-import type { BillStatus, CreateRemarkRequest, SocietyDoc, CreateBillRequest, CreateSocietyRequest, UpdateBillStatusRequest, SignInRequest, SignUpRequest, ApiResponse, CreateAgentRequest, UpdateAgentSocietiesRequest, TerminateAgentRequest, InviteMemberRequest, AcceptInvitationRequest, UpdateSocietyRequest, AddSocietyMemberRequest, RemoveSocietyMemberRequest, SocietyMemberInfo, SendOTPRequest, VerifyOTPRequest } from "@shared/api";
+import type { BillStatus, CreateRemarkRequest, SocietyDoc, CreateBillRequest, CreateSocietyRequest, UpdateBillStatusRequest, SignInRequest, SignUpRequest, ApiResponse, CreateAgentRequest, UpdateAgentSocietiesRequest, TerminateAgentRequest, InviteMemberRequest, AcceptInvitationRequest, UpdateSocietyRequest, AddSocietyMemberRequest, RemoveSocietyMemberRequest, SocietyMemberInfo, SendOTPRequest, VerifyOTPRequest, CreateAdvancePaymentRequest, UpdateAdvancePaymentRequest, AdvancePaymentStatus } from "@shared/api";
 import { ObjectId } from "mongodb";
 import crypto from "crypto";
 import { sendOTP, verifyOTP, isOTPVerified } from "../services/otpService";
@@ -96,8 +96,8 @@ async function getUserAccessibleSocieties(user: any): Promise<string[]> {
   
   if (!userDoc) return [];
   
-  // Admin can see all societies
-  if (userDoc.role === "Admin") {
+  // Admin and Manager can see all societies
+  if (userDoc.role === "Admin" || userDoc.role === "Manager") {
     const societiesCollection = await societiesCol();
     const societies = await societiesCollection.find({}).toArray();
     return societies.map(s => String(s._id));
@@ -321,6 +321,8 @@ router.post("/societies", requireAuth(["Admin"]), async (req, res) => {
     address: body.address as any,
     contactInfo: body.contactInfo,
     isActive: true,
+    approvalStatus: "Approved", // Admin-created societies are auto-approved
+    activationTimestamp: Date.now(),
     createdAt: Date.now(),
   };
   const result = await col.insertOne(doc as any);
@@ -653,10 +655,32 @@ router.post("/bills", requireAuth(["Admin", "Manager", "Treasurer", "Secretary",
     dueDate: z.number().int(),
     attachments: z.array(z.object({ 
       fileName: z.string().min(1), 
-      fileURL: z.string().url() 
+      fileURL: z.string().refine(
+        (url) => {
+          // Accept relative paths (starting with /) or full URLs
+          if (!url || url.length === 0) return false;
+          if (url.startsWith('/')) return true;
+          try {
+            new URL(url);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        { message: "Invalid file URL" }
+      )
     })).optional(),
   });
-  const body = Schema.parse(req.body);
+  
+  let body;
+  try {
+    body = Schema.parse(req.body);
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: "Validation error", details: error.errors });
+    }
+    return res.status(400).json({ error: "Invalid request body" });
+  }
 
   // Ensure society is approved
   const societiesCollection = await societiesCol();
@@ -793,14 +817,21 @@ router.put("/bills/:billId/status", requireAuth(["Admin", "Manager", "Treasurer"
   });
   const { status, remark } = Body.parse(req.body);
 
+  const user = (req as any).user;
+  
+  // Manager cannot approve bills
+  if (user?.role === "Manager" && status === "Approved") {
+    return res.status(403).json({ error: "Manager role cannot approve bills" });
+  }
+
   const col = await billsCol();
   const existing = await col.findOne({ _id: id });
   if (!existing) return res.status(404).json({ error: "Not found" });
   const previousStatus = existing.status as BillStatus;
   const newRemark = {
     text: remark || "",
-    authorId: (req as any).user?.uid || "unknown",
-    authorRole: (req as any).user?.role || "Agent",
+    authorId: user?.uid || "unknown",
+    authorRole: user?.role || "Agent",
     timestamp: Date.now(),
     previousStatus,
     newStatus: status,
@@ -1169,6 +1200,142 @@ router.get("/reports", requireAuth(["Admin", "Agent", "Manager", "Treasurer", "S
     col.countDocuments({ ...filter, status: "Approved" }),
   ]);
   return res.json({ pending, approved });
+});
+
+// Advance Payments API Routes
+router.post("/advance-payments", requireAuth(["Admin", "Agent", "Manager", "Treasurer", "Secretary", "President"]), async (req, res) => {
+  const Body = z.object({
+    societyId: z.string(),
+    billId: z.string().optional(),
+    totalAmountNeeded: z.number().min(0),
+    requestedAmount: z.number().min(0),
+    remarks: z.string().optional(),
+  });
+  
+  const result = Body.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({ error: "Invalid request body", details: result.error.issues });
+  }
+  
+  const user = (req as any).user;
+  const accessibleSocieties = await getUserAccessibleSocieties(user);
+  
+  if (!accessibleSocieties.includes(result.data.societyId)) {
+    return res.status(403).json({ error: "Access denied to this society" });
+  }
+  
+  const col = await advancePaymentsCol();
+  const doc = {
+    societyId: result.data.societyId,
+    billId: result.data.billId,
+    totalAmountNeeded: result.data.totalAmountNeeded,
+    requestedAmount: result.data.requestedAmount,
+    status: "Pending" as AdvancePaymentStatus,
+    requestedBy: user.uid,
+    remarks: result.data.remarks,
+    createdAt: Date.now(),
+  };
+  
+  const insertResult = await col.insertOne(doc);
+  return res.status(201).json({ id: String(insertResult.insertedId) });
+});
+
+router.get("/advance-payments", requireAuth(["Admin", "Agent", "Manager", "Treasurer", "Secretary", "President"]), async (req, res) => {
+  const { societyId, status } = req.query as { societyId?: string; status?: string };
+  const user = (req as any).user;
+  const accessibleSocieties = await getUserAccessibleSocieties(user);
+  
+  if (accessibleSocieties.length === 0) {
+    return res.json([]);
+  }
+  
+  const filter: any = {
+    societyId: { $in: accessibleSocieties }
+  };
+  
+  if (societyId && accessibleSocieties.includes(societyId)) {
+    filter.societyId = societyId;
+  }
+  if (status) filter.status = status;
+  
+  const col = await advancePaymentsCol();
+  const list = await col.find(filter).sort({ createdAt: -1 }).toArray();
+  return res.json(list.map(serialize));
+});
+
+router.get("/advance-payments/:advancePaymentId", requireAuth(["Admin", "Agent", "Manager", "Treasurer", "Secretary", "President"]), async (req, res) => {
+  const id = toId(req.params.advancePaymentId);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  
+  const user = (req as any).user;
+  const accessibleSocieties = await getUserAccessibleSocieties(user);
+  
+  const col = await advancePaymentsCol();
+  const found = await col.findOne({ _id: id });
+  if (!found) return res.status(404).json({ error: "Not found" });
+  
+  if (!accessibleSocieties.includes(found.societyId)) {
+    return res.status(403).json({ error: "Access denied to this advance payment" });
+  }
+  
+  return res.json(serialize(found));
+});
+
+router.put("/advance-payments/:advancePaymentId", requireAuth(["Admin", "Manager", "Treasurer", "Secretary", "President"]), async (req, res) => {
+  const id = toId(req.params.advancePaymentId);
+  if (!id) return res.status(400).json({ error: "Invalid id" });
+  
+  const Body = z.object({
+    status: z.enum(["Pending", "Approved", "Rejected", "Partially Approved"] as const),
+    approvedAmount: z.number().min(0).optional(),
+    receivedAmount: z.number().min(0).optional(),
+    remarks: z.string().optional(),
+  });
+  
+  const result = Body.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({ error: "Invalid request body", details: result.error.issues });
+  }
+  
+  const user = (req as any).user;
+  const accessibleSocieties = await getUserAccessibleSocieties(user);
+  
+  // Manager cannot approve advance payments
+  if (user?.role === "Manager" && (result.data.status === "Approved" || result.data.status === "Partially Approved")) {
+    return res.status(403).json({ error: "Manager role cannot approve advance payments" });
+  }
+  
+  const col = await advancePaymentsCol();
+  const existing = await col.findOne({ _id: id });
+  if (!existing) return res.status(404).json({ error: "Not found" });
+  
+  if (!accessibleSocieties.includes(existing.societyId)) {
+    return res.status(403).json({ error: "Access denied to this advance payment" });
+  }
+  
+  const updateData: any = {
+    status: result.data.status,
+    updatedAt: Date.now(),
+  };
+  
+  if (result.data.approvedAmount !== undefined) {
+    updateData.approvedAmount = result.data.approvedAmount;
+  }
+  if (result.data.receivedAmount !== undefined) {
+    updateData.receivedAmount = result.data.receivedAmount;
+  }
+  if (result.data.remarks !== undefined) {
+    updateData.remarks = result.data.remarks;
+  }
+  
+  if (result.data.status === "Approved" || result.data.status === "Partially Approved") {
+    updateData.approvedBy = user.uid;
+    updateData.approvedAt = Date.now();
+  }
+  
+  await col.updateOne({ _id: id }, { $set: updateData });
+  const updated = await col.findOne({ _id: id });
+  return res.json(serialize(updated!));
 });
 
 export default router;

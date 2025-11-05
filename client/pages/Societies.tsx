@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { getSocieties, createSociety, updateSociety, getSocietyMembers, addSocietyMember, removeSocietyMember } from "../lib/api";
+import { getSocieties, createSociety, updateSociety, getSocietyMembers, addSocietyMember, removeSocietyMember, approveSociety } from "../lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -16,7 +16,9 @@ export default function Societies() {
   const { user } = useAuth();
   const [societies, setSocieties] = useState<any[]>([]);
   const [selectedSociety, setSelectedSociety] = useState<any>(null);
-  const [members, setMembers] = useState<SocietyMemberInfo[]>([]);
+  const [membersBySociety, setMembersBySociety] = useState<Record<string, SocietyMemberInfo[]>>({});
+  const [loadingMembers, setLoadingMembers] = useState<Record<string, boolean>>({});
+  const [loadedSocieties, setLoadedSocieties] = useState<Set<string>>(new Set());
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isAddMemberDialogOpen, setIsAddMemberDialogOpen] = useState(false);
   const [isAddSocietyDialogOpen, setIsAddSocietyDialogOpen] = useState(false);
@@ -58,10 +60,17 @@ export default function Societies() {
   }, []);
 
   useEffect(() => {
-    if (selectedSociety) {
-      loadMembers(selectedSociety.id);
+    // Load members for all societies when component mounts or societies change
+    if (societies.length > 0) {
+      societies.forEach(society => {
+        if (!loadedSocieties.has(society.id)) {
+          loadMembers(society.id);
+          setLoadedSocieties(prev => new Set(prev).add(society.id));
+        }
+      });
     }
-  }, [selectedSociety]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [societies]);
 
   const loadSocieties = async () => {
     try {
@@ -73,11 +82,14 @@ export default function Societies() {
   };
 
   const loadMembers = async (societyId: string) => {
+    setLoadingMembers(prev => ({ ...prev, [societyId]: true }));
     try {
       const data = await getSocietyMembers(societyId);
-      setMembers(data);
+      setMembersBySociety(prev => ({ ...prev, [societyId]: data }));
     } catch (error) {
       console.error("Failed to load members:", error);
+    } finally {
+      setLoadingMembers(prev => ({ ...prev, [societyId]: false }));
     }
   };
 
@@ -139,6 +151,8 @@ export default function Societies() {
       await loadMembers(selectedSociety.id);
       setMemberForm({ email: "", name: "", role: "Manager" });
       setIsAddMemberDialogOpen(false);
+      // Also reload societies to ensure consistency
+      await loadSocieties();
     } catch (error) {
       console.error("Failed to add member:", error);
     } finally {
@@ -146,15 +160,13 @@ export default function Societies() {
     }
   };
 
-  const handleRemoveMember = async (userId: string) => {
-    if (!selectedSociety) return;
-
+  const handleRemoveMember = async (userId: string, societyId: string) => {
     if (!confirm("Are you sure you want to remove this member?")) return;
 
     setLoading(true);
     try {
-      await removeSocietyMember(selectedSociety.id, userId);
-      await loadMembers(selectedSociety.id);
+      await removeSocietyMember(societyId, userId);
+      await loadMembers(societyId);
     } catch (error) {
       console.error("Failed to remove member:", error);
     } finally {
@@ -166,7 +178,7 @@ export default function Societies() {
     setLoading(true);
     setError(null);
     try {
-      await createSociety({
+      const result = await createSociety({
         name: societyForm.name,
         address: {
           street: societyForm.street,
@@ -184,6 +196,10 @@ export default function Societies() {
       await loadSocieties();
       setSocietyForm({ name: "", street: "", city: "", state: "", zip: "", phone: "", email: "" });
       setIsAddSocietyDialogOpen(false);
+      // Clear loaded societies set to reload members for new society
+      setLoadedSocieties(new Set());
+      
+      // Society is auto-approved when created by admin (handled in backend)
     } catch (error: any) {
       console.error("Failed to create society:", error);
       setError(error.message || "Failed to create society. Please try again.");
@@ -236,6 +252,17 @@ export default function Societies() {
                         <Badge variant={society.isActive ? "default" : "secondary"}>
                           {society.isActive ? "Active" : "Inactive"}
                         </Badge>
+                        {society.approvalStatus && (
+                          <Badge 
+                            variant={
+                              society.approvalStatus === "Approved" ? "default" : 
+                              society.approvalStatus === "Rejected" ? "destructive" : 
+                              "secondary"
+                            }
+                          >
+                            {society.approvalStatus}
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground">
                         {society.address.street}, {society.address.city}, {society.address.state} {society.address.zip}
@@ -248,6 +275,29 @@ export default function Societies() {
                       )}
                     </div>
                     <div className="flex gap-2">
+                      {(society.approvalStatus !== "Approved" && society.approvalStatus !== undefined) && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={async () => {
+                            if (!confirm(`Are you sure you want to approve ${society.name}?`)) return;
+                            setLoading(true);
+                            try {
+                              await approveSociety(society.id);
+                              await loadSocieties();
+                            } catch (error) {
+                              console.error("Failed to approve society:", error);
+                              alert("Failed to approve society. Please try again.");
+                            } finally {
+                              setLoading(false);
+                            }
+                          }}
+                          disabled={loading}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          Approve Society
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -255,6 +305,7 @@ export default function Societies() {
                           setSelectedSociety(society);
                           setIsAddMemberDialogOpen(true);
                         }}
+                        disabled={society.approvalStatus !== "Approved"}
                       >
                         <Plus className="h-4 w-4 mr-1" />
                         Add Member
@@ -276,45 +327,57 @@ export default function Societies() {
                       <Users className="h-4 w-4" />
                       <span className="font-medium">Members</span>
                     </div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead>Role</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {members
-                          .filter(member => member.userId !== user?.uid) // Don't show current user
-                          .map((member) => (
-                            <TableRow key={member.userId}>
-                              <TableCell className="font-medium">{member.name}</TableCell>
-                              <TableCell>{member.email}</TableCell>
-                              <TableCell>
-                                <Badge variant="outline">{member.role}</Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={member.isActive ? "default" : "secondary"}>
-                                  {member.isActive ? "Active" : "Inactive"}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleRemoveMember(member.userId)}
-                                  disabled={loading}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                    {loadingMembers[society.id] ? (
+                      <div className="text-sm text-muted-foreground py-4">Loading members...</div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Role</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {membersBySociety[society.id] && membersBySociety[society.id].length > 0 ? (
+                            membersBySociety[society.id]
+                              .filter(member => member.userId !== user?.uid) // Don't show current user
+                              .map((member) => (
+                                <TableRow key={member.userId}>
+                                  <TableCell className="font-medium">{member.name}</TableCell>
+                                  <TableCell>{member.email}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline">{member.role}</Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant={member.isActive ? "default" : "secondary"}>
+                                      {member.isActive ? "Active" : "Inactive"}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleRemoveMember(member.userId, society.id)}
+                                      disabled={loading}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-4">
+                                No members yet
                               </TableCell>
                             </TableRow>
-                          ))}
-                      </TableBody>
-                    </Table>
+                          )}
+                        </TableBody>
+                      </Table>
+                    )}
                   </div>
                 </CardContent>
               </Card>

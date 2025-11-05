@@ -281,3 +281,37 @@ export interface OTPVerificationDoc {
   createdAt: number; // epoch ms
   attempts: number; // number of verification attempts
 }
+
+// Advance Payment types
+export type AdvancePaymentStatus = "Pending" | "Approved" | "Rejected" | "Partially Approved";
+
+export interface AdvancePaymentDoc {
+  societyId: string; // ref id
+  billId?: string; // Linked bill ID (optional)
+  totalAmountNeeded: number; // Total amount needed
+  requestedAmount: number; // Amount requested in this advance payment
+  receivedAmount?: number; // Amount received (if approved)
+  approvedAmount?: number; // Amount approved by admin
+  status: AdvancePaymentStatus;
+  requestedBy: string; // user uid
+  approvedBy?: string; // user uid (admin who approved)
+  remarks?: string;
+  createdAt: number; // epoch ms
+  updatedAt?: number; // epoch ms
+  approvedAt?: number; // epoch ms
+}
+
+export interface CreateAdvancePaymentRequest {
+  societyId: string;
+  billId?: string; // Optional bill ID to link advance payment to
+  totalAmountNeeded: number;
+  requestedAmount: number;
+  remarks?: string;
+}
+
+export interface UpdateAdvancePaymentRequest {
+  status: AdvancePaymentStatus;
+  approvedAmount?: number;
+  receivedAmount?: number;
+  remarks?: string;
+}
